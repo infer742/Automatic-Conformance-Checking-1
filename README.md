@@ -189,16 +189,17 @@ streamlit run user_interface.py --theme.base "dark"
 ```
 
 This will open the web interface in your browser
-`<img width="" src="docs/images/streamlit/login.png" />`
+
+<img width="" src="docs/images/streamlit/login.png" />
 Login with your credentials
-`<img width="" src="docs/images/streamlit/config.png" />`
+<img width="" src="docs/images/streamlit/config.png" />
 In the left tab, you can select your event log and select the end timestamp and resource column.
 You can select which deviation method to select and how you want to combine the results.
 You can also configure the parameters for each method.
 On the main tab, you can now click on `Get deviations`.
 This will run each method that you selected and combine the result into a single data frame. The results should look as follows. (Note that the deviation distribution will only show if you selected the Temporal Profiler)
-`<img width="" src="docs/images/streamlit/deviations.png" />`
-`<img width="" src="docs/images/streamlit/deviationtable.png" />`
+<img width="" src="docs/images/streamlit/deviations.png" />
+<img width="" src="docs/images/streamlit/deviationtable.png" />
 You can also export the dataframe as `CSV` by clicking on `Download data as CSV`
 
 ## Citations

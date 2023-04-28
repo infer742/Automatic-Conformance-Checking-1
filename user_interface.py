@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 import numpy as np
 import pandas as pd
 from pyinsights import Connector
@@ -10,9 +11,12 @@ from pyinsights import Combiner
 from sklearn.preprocessing import MinMaxScaler
 from pycelonis.celonis_api.pql.pql import PQL, PQLColumn
 import plotly.express as px
+from dotenv import load_dotenv
+
+st.set_page_config(page_title="Automatic Conformance Checking", layout="wide")
 
 
-@st.experimental_memo(show_spinner=False)
+@st.cache_data(show_spinner=False)
 def num_cases(_model, url):
     # returns number of cases in log
     activity_table = st.session_state.connector.activity_table()
@@ -32,13 +36,14 @@ def logout():
     del st.session_state.connector
 
 
-@st.experimental_memo
+
+@st.cache_data
 def convert_df(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
     return df.to_csv().encode('utf-8')
 
 
-@st.experimental_memo
+@st.cache_data
 def columns(_model, model_url):
     # returns columns of datamodel
     model_columns = _model.default_activity_table.columns
@@ -66,7 +71,7 @@ def highlight_large(s, props=''):
     return np.where(s >= 0.75, props, '')
 
 
-@st.experimental_memo
+@st.cache_data
 def set_datamodel(_model, endtime, resource_co, url):
     st.session_state.connector.datamodel = _model
     if endtime['name'] == "":
@@ -76,7 +81,7 @@ def set_datamodel(_model, endtime, resource_co, url):
     st.session_state.resource_col = resource_col["name"]
 
 
-@st.experimental_memo(show_spinner=True)
+@st.cache_data(show_spinner=True)
 def temporal_deviations(endtime, resource_col, simga, deviation_cost, extended_view, url):
     # compute temporal deviations
     profiler = TemporalProfiler(connector=st.session_state.connector)
@@ -86,7 +91,7 @@ def temporal_deviations(endtime, resource_col, simga, deviation_cost, extended_v
     return df
 
 
-@st.experimental_memo(show_spinner=True)
+@st.cache_data(show_spinner=True)
 def lsk_deviations(noise_threshold, url):
     # compute lsk deviations
     lsk = LogSkeleton(connector=st.session_state.connector)
@@ -95,7 +100,7 @@ def lsk_deviations(noise_threshold, url):
     return df
 
 
-@st.experimental_memo(show_spinner=True)
+@st.cache_data(show_spinner=True)
 def anomaly_deviations(contamination, param_optimization, url, endtime, resource_col):
     # compute anomalies
     df = anomaly_detection(st.session_state.connector,
@@ -104,14 +109,14 @@ def anomaly_deviations(contamination, param_optimization, url, endtime, resource
     return df
 
 
-@st.experimental_memo(show_spinner=True)
+@st.cache_data(show_spinner=True)
 def _combine_deviations(_combiner, deviations, how, url, params):
     # combine results
     df = combiner.combine_deviations(deviations=deviations, how=how)
     return df
 
 
-@st.experimental_memo(show_spinner=True)
+@st.cache_data(show_spinner=True)
 def resource_deviations(endtime, resource_col, time_unit, reference_unit, min_batch_size, batch_percentage, grouped_by_batches, batch_types, url):
     # compute resource deviations
     st.session_state.connector.resource_col = resource_col
@@ -128,8 +133,54 @@ def resource_deviations(endtime, resource_col, time_unit, reference_unit, min_ba
 
     return df
 
+def get_deviations():
+    # set vars
+        if st.session_state.connector.end_time == "":
+            st.session_state.connector.end_time = None
+        else:
+            st.session_state.end_time = end_timestamp
+        st.session_state.connector.resource_col = resource_col["name"]
 
-st.set_page_config(page_title="Automatic Conformance Checking", layout="wide")
+        st.session_state.connector.datamodel = model_option
+        if len(method_option) == 0:
+            st.error("Please select a method!")
+        else:
+            st.session_state.success = False
+            st.session_state.deviations = {}
+            st.subheader("Deviations:")
+            # calculate deviations
+            with st.spinner("Calculating deviations"):
+                if "Temporal Profiling" in method_option:
+                    # sanity check due to bug
+
+                    df = temporal_deviations(end_timestamp["name"], resource_col["name"],
+                                             sigma, deviation_cost, extended_view, model_option.url)
+                    st.session_state.deviations["Temporal Profiling"] = df
+
+                if "Resource Profiling" in method_option:
+                    if resource_col["name"] != "":
+                        df = resource_deviations(end_timestamp["name"], resource_col["name"],
+                                                 time_unit=time_unit, reference_unit=reference_unit,
+                                                 min_batch_size=min_batch_size, batch_percentage=batch_percentage, grouped_by_batches=grouped_by_batches, batch_types=batch_types, url=model_option.url
+                                                 )
+                        st.session_state.deviations["Resource Profiling"] = df
+
+                    else:
+                        st.error("Please select a valid resource column!")
+                if "Log Skeleton" in method_option:
+                    df = lsk_deviations(noise_treshold, url=model_option.url)
+                    st.session_state.deviations["Log Skeleton"] = df
+                if "Anomaly Detection" in method_option:
+
+                    df = anomaly_deviations(contamination=contamination, param_optimization=param_opti, url=model_option.url,
+                                            endtime=end_timestamp["name"], resource_col=resource_col["name"])
+                    st.session_state.deviations["Anomaly Detection"] = df
+                if len(st.session_state.deviations.keys()) == len(method_option):
+                    st.session_state.success = True
+                else:
+                    st.error("Error")
+
+
 
 st.markdown("""<style>
             div.css-18e3th9 {
@@ -156,6 +207,7 @@ if "deviations" not in st.session_state:
 
 # log in page
 if "connector" not in st.session_state:
+    st.subheader("Login to Celonis")
     with st.form("login"):
         url = st.text_input("Celonis URL")
         api_token = st.text_input("Api token")
@@ -163,7 +215,20 @@ if "connector" not in st.session_state:
             options=["USER_KEY", "APP_KEY"], label="Key type")
         login = st.form_submit_button("Login")
 
-    if login:
+    st.markdown("**OR**")
+    demo = st.button("Watch a Demo")
+    
+    # simple demo with bac dataset (sampled)
+    if demo:
+        load_dotenv()
+        url = os.environ.get("URL_CFI")
+        api_token = os.environ.get("TOKEN_CFI")
+        key_type = "USER_KEY"
+        st.session_state['connector'] = Connector(
+                api_token=api_token, url=url, key_type=key_type)
+        st.experimental_rerun()
+        
+    elif login:
         try:
             st.session_state.connector = Connector(
                 api_token=api_token, url=url, key_type=key_type)
@@ -172,7 +237,7 @@ if "connector" not in st.session_state:
         st.experimental_rerun()
 
 # if logged in
-elif "connector" in st.session_state:
+else:
     st.info("""Select a datamodel and the necessary columns on the left sidebar. Then, select your prefered methods and set the necessary parameters.
 After that, you can just click on 'Get deviations'!""",  icon="ℹ️")
 
@@ -245,52 +310,7 @@ After that, you can just click on 'Get deviations'!""",  icon="ℹ️")
                         label="Contamination", value=0.2, step=0.1)
     # run deviations
     if run:
-        # set vars
-        if st.session_state.connector.end_time == "":
-            st.session_state.connector.end_time = None
-        else:
-            st.session_state.end_time = end_timestamp
-        st.session_state.connector.resource_col = resource_col["name"]
-
-        st.session_state.connector.datamodel = model_option
-        if len(method_option) == 0:
-            st.error("Please select a method!")
-        else:
-            st.session_state.success = False
-            st.session_state.deviations = {}
-            st.subheader("Deviations:")
-            # calculate deviations
-            with st.spinner("Calculating deviations"):
-                if "Temporal Profiling" in method_option:
-                    # sanity check due to bug
-
-                    df = temporal_deviations(end_timestamp["name"], resource_col["name"],
-                                             sigma, deviation_cost, extended_view, model_option.url)
-                    st.session_state.deviations["Temporal Profiling"] = df
-
-                if "Resource Profiling" in method_option:
-                    if resource_col["name"] != "":
-                        df = resource_deviations(end_timestamp["name"], resource_col["name"],
-                                                 time_unit=time_unit, reference_unit=reference_unit,
-                                                 min_batch_size=min_batch_size, batch_percentage=batch_percentage, grouped_by_batches=grouped_by_batches, batch_types=batch_types, url=model_option.url
-                                                 )
-                        st.session_state.deviations["Resource Profiling"] = df
-
-                    else:
-                        st.error("Please select a valid resource column!")
-                if "Log Skeleton" in method_option:
-                    df = lsk_deviations(noise_treshold, url=model_option.url)
-                    st.session_state.deviations["Log Skeleton"] = df
-                if "Anomaly Detection" in method_option:
-
-                    df = anomaly_deviations(contamination=contamination, param_optimization=param_opti, url=model_option.url,
-                                            endtime=end_timestamp["name"], resource_col=resource_col["name"])
-                    st.session_state.deviations["Anomaly Detection"] = df
-                if len(st.session_state.deviations.keys()) == len(method_option):
-                    st.session_state.success = True
-                else:
-                    st.error("Error")
-
+        get_deviations()
     # if successfully calculated deviations
     if st.session_state.success:
         # combine them if multiple methods selected
@@ -310,7 +330,7 @@ After that, you can just click on 'Get deviations'!""",  icon="ℹ️")
 
         # get score cols
         scoring_cols = [
-            col for col in df.columns.values if "# this" in col or "deviation cost" in col or "anomaly score" in col]
+            col for col in df.columns.values if "# this" in col or col == "deviation cost" or "anomaly score" in col]
 
         st.subheader("Deviations")
         # show pie chart with proportions of deviations
@@ -322,22 +342,26 @@ After that, you can just click on 'Get deviations'!""",  icon="ℹ️")
                      "conforming cases", "non-conforming cases"], title='Proportion of deviations')
         st.plotly_chart(fig)
         # show bar chart with deviation scores
-        st.markdown("**Distribution of deviation scores**")
-        if len(scoring_cols) > 0:
-            scaler = MinMaxScaler()
-            df[scoring_cols] = scaler.fit_transform(df[scoring_cols])
+        if deviation_cost:
+            st.markdown("**Distribution of deviation scores**")
+            if len(scoring_cols) > 0:
+                scaler = MinMaxScaler()
+                print(df.columns.values)
+                print(df)
+                df[scoring_cols] = scaler.fit_transform(df[scoring_cols])
 
-            bins = pd.IntervalIndex.from_tuples(
-                [(0, 0.33), (0.33, 0.66), (0.66, 1)])
-            names = ['small', 'medium', 'large']
+                bins = pd.IntervalIndex.from_tuples(
+                    [(0, 0.33), (0.33, 0.66), (0.66, 1)])
+                names = ['small', 'medium', 'large']
 
-            for col in scoring_cols:
-                x = pd.cut(df[df[col] != np.nan][col].to_list(), bins)
-                x.categories = names
-                df[col + "_category"] = x
-            st.bar_chart(
-                [df[col + "_category"].value_counts() for col in scoring_cols])
+                for col in scoring_cols:
+                    x = pd.cut(df[df[col] != np.nan][col].to_list(), bins)
+                    x.categories = names
+                    df[col + "_category"] = x
+                st.bar_chart(
+                    [df[col + "_category"].value_counts() for col in scoring_cols])
 
+        st.subheader("Detailed View")
         # show deviations as df
         st.dataframe(df)
 
