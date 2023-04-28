@@ -3,14 +3,9 @@
 We developed the library **pyinsights** to get automatic conformance checking insights on business processes.
 We aim at a seamless integration with one of the leading process mining tools [Celonis](https://www.celonis.com/).
 
-## Dependencies
-
-- pm4py
-- streamlit
-- scikit-learn
-- prince
-- seaborn
-- plotly
+<p align="center">
+  <img width="" src="docs/images/streamlit/runthrough.gif" />
+</p>
 
 ## Install
 
@@ -194,18 +189,17 @@ streamlit run user_interface.py --theme.base "dark"
 ```
 
 This will open the web interface in your browser
-<img width="" src="docs/images/streamlit/login.png" />
+`<img width="" src="docs/images/streamlit/login.png" />`
 Login with your credentials
-<img width="" src="docs/images/streamlit/config.png" />
+`<img width="" src="docs/images/streamlit/config.png" />`
 In the left tab, you can select your event log and select the end timestamp and resource column.
 You can select which deviation method to select and how you want to combine the results.
 You can also configure the parameters for each method.
 On the main tab, you can now click on `Get deviations`.
 This will run each method that you selected and combine the result into a single data frame. The results should look as follows. (Note that the deviation distribution will only show if you selected the Temporal Profiler)
-<img width="" src="docs/images/streamlit/deviations.png" />
-<img width="" src="docs/images/streamlit/deviationtable.png" />
+`<img width="" src="docs/images/streamlit/deviations.png" />`
+`<img width="" src="docs/images/streamlit/deviationtable.png" />`
 You can also export the dataframe as `CSV` by clicking on `Download data as CSV`
-
 
 ## Citations
 
@@ -216,6 +210,7 @@ Some of the papers we used include:
 - [Log Skeletons: A Classification Approach to Process Discovery](https://arxiv.org/abs/1806.08247)
 
 ## Adjustments to Log Skeleton
+
 During the implementation of the log skeleton according to the definition of the paper, we concluded that their approach is not computationally feasible as the runtime for determining all possible subsets that need to be checked is exponential.
 The authors also acknowledge this fact in their paper.
 
